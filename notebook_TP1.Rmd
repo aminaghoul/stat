@@ -1,0 +1,143 @@
+---
+title: "TP 1 : données Vulnerability "
+output: html_notebook
+
+---
+## Avant de commencer
+Vérifier le répertoire courant. Si besoin, faire pointer R vers votre répertoire
+```{r,echo=FALSE}
+getwd()
+#setwd()
+```
+(Installer et) charger les librairies
+```{r}
+install.packages("dplyr")
+install.packages("ggplot2")
+library(dplyr)
+library(ggplot2)
+```
+ou plus simple
+```{r}
+library(tidyverse)
+```
+
+## Question 1
+Charger les données "vulnerability"
+```{r}
+vul = read_csv("vulnerability.csv")
+summary(vul)
+glimpse(vul)
+```
+```{r}
+summarise_each(vul[,2:8], funs(mean))
+```
+
+Faire un scatterplot.
+
+  - solution 1
+```{r}
+pairs(~ln_death_risk+ln_events+ln_fert+hdi+ln_pop,  main="Simple Scatterplot Matrix",data=vul)
+```
+Attention, lien entre death risk et ln fert ne parait pas tr?s lin?aire (quadratique)
+  - solution 2
+```{r}
+install.packages("GGally")
+library(GGally)
+ggpairs(vul[,2:8])
+```
+## Question 2
+Modèle avec 1 covariable
+```{r}
+fit_univ = lm(ln_death_risk~ln_events,data = vul)
+summary(fit_univ)
+```
+```{r}
+#fit_univ$fitted.values
+```
+```{r}
+ggplot(data =vul, aes(x=ln_events,y=ln_death_risk)) + 
+        geom_point() +
+        geom_smooth(method='lm',formula=y~x)
+```
+
+## Question 3 g)
+Intervalle de confiance et prédiction
+```{r}
+newdata=data.frame(ln_events=3.4)
+pred=predict(fit_univ,newdata,interval="predict")
+ic=predict(fit_univ,interval="confidence")
+print(pred)
+print(ic[1:5,])
+```
+
+
+## Question 4
+
+Modèle avec toutes les variables explicatives
+```{r}
+glimpse(vul)
+```
+
+```{r}
+fit_modele1 = lm(ln_death_risk~ln_urb + ln_events + ln_fert + hdi + ln_pop,
+              data = vul)
+summary(fit_modele1)
+```
+Comparer les R2
+R2=0.429
+R2 ajuste=0.408
+Test pour $\mathcal H_0$ modèle univarié contre $\mathcal H_1$ modèle à 5 variables
+Test de Fisher
+```{r}
+anova(fit_univ,fit_modele1)
+```
+La pvalue est à $1.84*10^{-13}$, on préfère le modèle à 5 covariables à celui à 1 covariable.
+
+Modèle à 6 variables à $hdi^{2}$
+```{r}
+vul$hdi_squared=(vul$hdi)^2
+fit_modele2 = lm(ln_death_risk~ln_urb + ln_events + ln_fert + hdi + hdi_squared+ ln_pop,
+              data = vul)
+summary(fit_modele2)
+#?poly
+#lm(ln_death_risk~ln_urb + ln_events + ln_fert + poly(hdi,2)+ ln_pop,
+#data = vul)
+
+```
+```{r}
+anova(fit_modele1,fit_modele2)
+```
+Modèle nul
+```{r}
+fit_null = lm(ln_death_risk~1,
+              data = vul)
+summary(fit_null)
+```
+
+Modèle fit AIC
+```{r}
+fit_aic = step(fit_modele2)
+fit_bic=step(fit_modele2, k = log(nrow(vul)))
+```
+
+Avec gg plot trace radj, r2 et aic de tous les modèles nul, univ, aic, modele1, modele2
+```{r}
+library(tidyverse)
+r_squared = c(0,summary(fit_univ)$r.squared,summary(fit_modele1)$r.squared,summary(fit_aic)$r.squared,summary(fit_modele2)$r.squared)
+
+adj_r_squared =c(0,summary(fit_univ)$adj.r.squared,summary(fit_modele1)$adj.r.squared,summary(fit_aic)$adj.r.squared,summary(fit_modele2)$adj.r.squared)
+
+aic = c(AIC(fit_null),AIC(fit_univ),AIC(fit_modele1),AIC(fit_aic),AIC(fit_modele2))
+data_measures = data_frame(x= c(0,1,5,5.1,6),r_squared = r_squared,adj_r_squared=adj_r_squared,aic=aic/400)
+data_measures_gather = gather(data_measures,"measures","values",2:4)
+
+ggplot(data_measures_gather,aes(x,values, color=measures)) +geom_point()
+```
+On trace sans gg plot
+```{r}
+x=c(0,1,5,5.1,6)
+plot(x,r_squared,ylim=c(0,1.5))
+points(x,adj_r_squared,col="red")
+points(x,aic/500,col="blue")
+```
+Le R2 choisit le plus grand modèle. Le R2 ajusté et l'AIC choisissent tous les deux le modèle 'fit_aic'.
